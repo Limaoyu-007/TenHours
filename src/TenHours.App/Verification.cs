@@ -174,7 +174,7 @@ internal static class Verification
                         {
                             taskName.Show(form); taskName.Refresh(); Capture("10-task-name", taskName);
                             taskName.AcceptButton!.PerformClick();
-                            Check(taskName.DialogResult == DialogResult.OK && taskName.TaskTitle == "读一页书", "task name dialog accepts a simple reminder without scheduling fields");
+                            Check(taskName.DialogResult == DialogResult.OK && taskName.TaskTitle == "读一页书", $"task name dialog retains confirmed reminder (result={taskName.DialogResult}, title={taskName.TaskTitle})");
                         }
                         break;
                     case 145:

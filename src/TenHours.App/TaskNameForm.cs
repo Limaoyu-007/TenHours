@@ -3,7 +3,8 @@ namespace TenHours;
 internal sealed class TaskNameForm : Form
 {
     private readonly TextBox input = new() { MaxLength = 80, Dock = DockStyle.Fill, PlaceholderText = "写下一件想完成的事" };
-    internal string TaskTitle => input.Text.Trim();
+    private string? acceptedTitle;
+    internal string TaskTitle => acceptedTitle ?? input.Text.Trim();
 
     internal TaskNameForm(string? current = null)
     {
@@ -24,7 +25,7 @@ internal sealed class TaskNameForm : Form
         var confirm = new Button { Text = "确定", AutoSize = true, Enabled = TaskTitle.Length > 0 };
         var cancel = new Button { Text = "取消", AutoSize = true, DialogResult = DialogResult.Cancel };
         input.TextChanged += (_, _) => confirm.Enabled = TaskTitle.Length > 0;
-        confirm.Click += (_, _) => { DialogResult = DialogResult.OK; Close(); };
+        confirm.Click += (_, _) => { acceptedTitle = input.Text.Trim(); DialogResult = DialogResult.OK; Close(); };
         actions.Controls.AddRange([confirm, cancel]);
         Controls.Add(input);
         Controls.Add(label);
