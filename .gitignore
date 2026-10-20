@@ -1,0 +1,17 @@
+**/bin/
+**/obj/
+artifacts/
+verification/
+.vs/
+*.user
+tasks.txt
+data.json*
+VERIFICATION.md
+.local/
+.env
+.env.*
+*.log
+*.pem
+*.key
+*.pfx
+*.p12
