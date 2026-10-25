@@ -240,6 +240,63 @@ try
         reopened.Data.Tasks!.Clear(); store.Save(reopened.Data);
         Equal(0, store.Load().Data.Tasks!.Count);
     });
+    Test("task completion snapshots survive edits, deletion, restart and daily reset", () =>
+    {
+        var store = new JsonStore(Path.Combine(directory, "task-history"));
+        var today = new DateTime(2026, 10, 25);
+        var daily = new ChecklistItem { Title = "英语单词", IsDaily = true };
+        var normal = new ChecklistItem { Title = "项目收尾" };
+        var data = new TimerData { Tasks = [daily, normal] };
+        data.GetDay(today.AddDays(-1)).WorkTicks = Sec(7200);
+        data.AdvanceChecklistDate(today);
+        Equal(false, data.GetDay(today.AddDays(-1)).TaskHistoryRecorded);
+        data.SetTaskCompletion(daily.Id, true, today);
+        data.SetTaskCompletion(normal.Id, true, today);
+        daily.Title = "改过名字";
+        data.Tasks.Remove(normal);
+        store.Save(data);
+        var loaded = store.Load().Data;
+        Equal(2, loaded.GetDay(today).CompletedTasks.Count);
+        Equal("英语单词", loaded.GetDay(today).CompletedTasks[0].Title);
+        loaded.AdvanceChecklistDate(today.AddDays(3));
+        Equal(false, loaded.Tasks![0].IsCompleted);
+        Equal(2, loaded.GetDay(today).CompletedTasks.Count);
+        Equal(0, loaded.GetDay(today.AddDays(3)).CompletedTasks.Count);
+        Equal(Sec(7200), loaded.GetDay(today.AddDays(-1)).WorkTicks);
+    });
+    Test("completion undo affects only today and never duplicates an entry", () =>
+    {
+        var today = new DateTime(2026, 10, 25);
+        var task = new ChecklistItem { Title = "算法题", IsDaily = true };
+        var data = new TimerData { Tasks = [task] };
+        data.SetTaskCompletion(task.Id, true, today);
+        data.SetTaskCompletion(task.Id, true, today);
+        Equal(1, data.GetDay(today).CompletedTasks.Count);
+        data.SetTaskCompletion(task.Id, false, today);
+        Equal(0, data.GetDay(today).CompletedTasks.Count);
+        data.SetTaskCompletion(task.Id, true, today);
+        data.SetTaskCompletion(task.Id, false, today.AddDays(1));
+        Equal(1, data.GetDay(today).CompletedTasks.Count);
+        Equal(0, data.GetDay(today.AddDays(1)).CompletedTasks.Count);
+    });
+    Test("display preferences persist without changing the managed task order", () =>
+    {
+        var store = new JsonStore(Path.Combine(directory, "task-display"));
+        var normal = new ChecklistItem { Title = "项目" };
+        var daily = new ChecklistItem { Title = "英语", IsDaily = true };
+        var completed = new ChecklistItem { Title = "已完成", IsCompleted = true };
+        var data = new TimerData { Tasks = [normal, daily, completed], HideCompletedTasks = true,
+            DailyTasksFirst = true, TasksCollapsed = true };
+        Equal(daily.Id, data.VisibleTasks()[0].Id);
+        Equal(2, data.VisibleTasks().Count);
+        Equal(normal.Id, data.Tasks[0].Id);
+        store.Save(data);
+        var loaded = store.Load().Data;
+        Equal(true, loaded.TasksCollapsed);
+        Equal(true, loaded.HideCompletedTasks);
+        Equal(true, loaded.DailyTasksFirst);
+        Equal(daily.Id, loaded.VisibleTasks()[0].Id);
+    });
     Test("invalid checklist data recovers the last complete backup", () =>
     {
         var store = new JsonStore(Path.Combine(directory, "invalid-checklist"));

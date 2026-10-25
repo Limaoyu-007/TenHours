@@ -17,6 +17,12 @@ internal sealed class TimerForm : Form
     private readonly Icon greenIcon;
     private readonly Button toggle = new();
     private readonly Button addTask = new();
+    private readonly Button collapseTasks = new();
+    private readonly Button taskOptions = new();
+    private readonly ContextMenuStrip taskDisplayMenu = new();
+    private readonly ToolStripMenuItem hideCompletedItem = new("隐藏已完成");
+    private readonly ToolStripMenuItem dailyFirstItem = new("每日任务置顶");
+    private readonly ToolStripMenuItem collapseItem = new("折叠任务区");
     private readonly TaskListPanel taskPanel = new() { BackColor = Color.FromArgb(24, 30, 40) };
     private readonly ToolTip tooltip = new();
     private readonly ContextMenuStrip menu = new();
@@ -75,6 +81,18 @@ internal sealed class TimerForm : Form
         menu.Items.Add("补录时间…", null, (_, _) => ShowManualEntry());
         menu.Items.Add("查看历史", null, (_, _) => ShowHistory());
         menu.Items.Add("管理任务…", null, (_, _) => ShowTaskManager());
+        var display = new ToolStripMenuItem("清单显示") { DropDown = taskDisplayMenu };
+        taskDisplayMenu.Items.AddRange([hideCompletedItem, dailyFirstItem, collapseItem]);
+        hideCompletedItem.Click += (_, _) => ChangeTaskDisplay(() => engine.Data.HideCompletedTasks = !engine.Data.HideCompletedTasks);
+        dailyFirstItem.Click += (_, _) => ChangeTaskDisplay(() => engine.Data.DailyTasksFirst = !engine.Data.DailyTasksFirst);
+        collapseItem.Click += (_, _) => ToggleTaskCollapse();
+        taskDisplayMenu.Opening += (_, _) =>
+        {
+            hideCompletedItem.Checked = engine.Data.HideCompletedTasks;
+            dailyFirstItem.Checked = engine.Data.DailyTasksFirst;
+            collapseItem.Checked = engine.Data.TasksCollapsed;
+        };
+        menu.Items.Add(display);
         var settings = new ToolStripMenuItem("设置");
         startupItem = new ToolStripMenuItem("开机自启（当前用户）", null, (_, _) => ToggleStartup());
         settings.DropDownItems.Add(startupItem);
@@ -112,6 +130,22 @@ internal sealed class TimerForm : Form
         addTask.Click += (_, _) => ShowTaskManager();
         Controls.Add(taskPanel);
         Controls.Add(addTask);
+        foreach (var button in new[] { collapseTasks, taskOptions })
+        {
+            button.FlatStyle = FlatStyle.Flat;
+            button.FlatAppearance.BorderSize = 0;
+            button.FlatAppearance.MouseOverBackColor = Color.FromArgb(33, 42, 54);
+            button.ForeColor = Color.FromArgb(195, 208, 224);
+            button.Cursor = Cursors.Hand;
+            Controls.Add(button);
+        }
+        collapseTasks.TextAlign = ContentAlignment.MiddleLeft;
+        collapseTasks.AccessibleName = "展开或折叠任务区";
+        collapseTasks.Click += (_, _) => ToggleTaskCollapse();
+        taskOptions.Text = "···";
+        taskOptions.AccessibleName = "清单显示选项";
+        taskOptions.Click += (_, _) => taskDisplayMenu.Show(taskOptions, new Point(0, taskOptions.Height));
+        tooltip.SetToolTip(taskOptions, "隐藏已完成 · 每日任务置顶 · 折叠任务区");
         tooltip.SetToolTip(this, "拖动移动 · 右键切换工作 / 学习 · 双击托盘图标恢复");
         timer.Tick += (_, _) => OnTick();
         MouseDown += (_, e) =>
@@ -175,7 +209,7 @@ internal sealed class TimerForm : Form
     private int Px(float value) => (int)Math.Round(value * WindowDpi / 96f);
 
     internal const int LogicalWidth = 260;
-    internal int LogicalHeight => 220 + 28 * Math.Clamp(engine.Data.Tasks!.Count, 1, 6);
+    internal int LogicalHeight => engine.Data.TasksCollapsed ? 176 : 220 + 28 * Math.Clamp(engine.Data.VisibleTasks().Count, 1, 6);
     internal IReadOnlyList<CheckBox> TaskRows => taskPanel.Controls.OfType<CheckBox>().ToArray();
 
     private void LayoutWidget()
@@ -187,7 +221,12 @@ internal sealed class TimerForm : Form
         detailFont = new Font("Microsoft YaHei UI", 11 * WindowDpi / 96f, FontStyle.Regular, GraphicsUnit.Pixel);
         toggle.Font = detailFont;
         toggle.SetBounds(Px(184), Px(95), Px(60), Px(25));
-        int panelHeight = Px(28 * Math.Clamp(engine.Data.Tasks!.Count, 1, 6));
+        collapseTasks.Font = taskOptions.Font = detailFont;
+        collapseTasks.Text = (engine.Data.TasksCollapsed ? "▸  " : "▾  ") + "任务清单";
+        collapseTasks.SetBounds(Px(12), Px(140), Px(128), Px(25));
+        taskOptions.SetBounds(Px(149), Px(140), Px(27), Px(25));
+        taskPanel.Visible = addTask.Visible = !engine.Data.TasksCollapsed;
+        int panelHeight = Px(28 * Math.Clamp(engine.Data.VisibleTasks().Count, 1, 6));
         taskPanel.SetBounds(Px(12), Px(170), Px(236), panelHeight);
         addTask.Font = detailFont;
         addTask.SetBounds(Px(16), Px(170) + panelHeight + Px(10), Px(228), Px(26));
@@ -232,8 +271,6 @@ internal sealed class TimerForm : Form
             TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
         using var divider = new Pen(Color.FromArgb(40, 49, 63), 1);
         g.DrawLine(divider, Px(16), Px(133), Px(244), Px(133));
-        TextRenderer.DrawText(g, "任务清单", detailFont, new Rectangle(Px(16), Px(145), Px(160), Px(18)),
-            Color.FromArgb(195, 208, 224), TextFormatFlags.Left | TextFormatFlags.NoPadding);
         int completed = engine.Data.Tasks!.Count(x => x.IsCompleted);
         TextRenderer.DrawText(g, $"{completed} / {engine.Data.Tasks!.Count}", detailFont,
             new Rectangle(Px(181), Px(145), Px(63), Px(18)), Muted, TextFormatFlags.Right | TextFormatFlags.NoPadding);
@@ -245,19 +282,20 @@ internal sealed class TimerForm : Form
 
     private void RenderTasks()
     {
+        var visible = engine.Data.VisibleTasks();
         int scroll = taskPanel.ScrollOffset;
         taskPanel.SuspendLayout();
         foreach (Control row in taskPanel.Controls.Cast<Control>().ToArray()) row.Dispose();
         taskPanel.Controls.Clear();
         int width = taskPanel.Width - Px(12);
-        if (engine.Data.Tasks!.Count == 0)
+        if (visible.Count == 0)
         {
-            taskPanel.Controls.Add(new Label { Text = "写下一件想完成的事", ForeColor = Muted,
+            taskPanel.Controls.Add(new Label { Text = engine.Data.Tasks!.Count == 0 ? "写下一件想完成的事" : "已隐藏全部完成项", ForeColor = Muted,
                 Font = detailFont, AutoSize = false, Bounds = new Rectangle(Px(7), 0, width - Px(7), Px(28)), TextAlign = ContentAlignment.MiddleLeft });
         }
-        for (int i = 0; i < engine.Data.Tasks.Count; i++)
+        for (int i = 0; i < visible.Count; i++)
         {
-            var item = engine.Data.Tasks[i];
+            var item = visible[i];
             var row = new TaskCheckBox(() => RenameTaskFromMenu(item), () => DeleteTask(item.Id))
             {
                 Text = item.Title, Checked = item.IsCompleted, Font = detailFont,
@@ -270,9 +308,10 @@ internal sealed class TimerForm : Form
             {
                 bool completed = row.Checked;
                 bool changedDate = engine.Data.AdvanceChecklistDate(engine.Today);
-                item.IsCompleted = completed;
+                engine.Data.SetTaskCompletion(item.Id, completed, engine.Today);
                 SaveChecklist();
-                if (changedDate) RenderTasks();
+                if (changedDate || engine.Data.HideCompletedTasks)
+                    BeginInvoke((Action)(() => { if (!IsDisposed) { LayoutWidget(); ClampToScreen(); } }));
                 else row.Invalidate();
             };
             tooltip.SetToolTip(row, item.Title + (item.IsDaily ? "\n每日任务 · 每天重置勾选" : "\n普通任务 · 跨天保留状态") + "\n右键编辑或删除");
@@ -281,6 +320,17 @@ internal sealed class TimerForm : Form
         taskPanel.ResumeLayout(true);
         taskPanel.Configure(Px(28), scroll);
     }
+
+    private void ChangeTaskDisplay(Action change)
+    {
+        change();
+        SaveChecklist();
+        taskPanel.ScrollTo(0);
+        LayoutWidget();
+        ClampToScreen();
+    }
+
+    private void ToggleTaskCollapse() => ChangeTaskDisplay(() => engine.Data.TasksCollapsed = !engine.Data.TasksCollapsed);
 
     internal Guid AddTask(string title, bool isDaily = false)
     {
@@ -307,7 +357,8 @@ internal sealed class TimerForm : Form
         item.Title = ValidateTaskTitle(title);
         item.IsDaily = isDaily;
         SaveChecklist();
-        RenderTasks();
+        LayoutWidget();
+        ClampToScreen();
         taskManager?.Reload(id);
     }
 
@@ -431,7 +482,7 @@ internal sealed class TimerForm : Form
     {
         if (engine.Data.AdvanceChecklistDate(engine.Today))
         {
-            if (detailFont is not null) RenderTasks();
+            if (detailFont is not null) { LayoutWidget(); ClampToScreen(); }
             taskManager?.RefreshStatuses();
             if (!TrySave()) engine.Pause();
         }
@@ -476,6 +527,7 @@ internal sealed class TimerForm : Form
     private void ShowHistory()
     {
         engine.Settle();
+        RefreshState();
         if (history is { IsDisposed: false }) { history.Activate(); return; }
         history = new HistoryForm(engine.Data);
         history.Show(this);
@@ -595,6 +647,7 @@ internal sealed class TimerForm : Form
             tray.Visible = false;
             tray.Dispose();
             menu.Dispose();
+            taskDisplayMenu.Dispose();
             tooltip.Dispose();
             history?.Dispose();
             taskManager?.Dispose();

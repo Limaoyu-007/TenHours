@@ -98,6 +98,12 @@ public sealed class JsonStore(string directory)
                 System.Globalization.DateTimeStyles.None, out _) || day is null || day.WorkTicks < 0 || day.StudyTicks < 0 ||
                 day.WorkTicks > long.MaxValue - day.StudyTicks)
                 throw new InvalidDataException("Invalid day record: " + date);
+            if (day.CompletedTasks is null) throw new InvalidDataException("Invalid task history: " + date);
+            var completedIds = new HashSet<Guid>();
+            foreach (var task in day.CompletedTasks)
+                if (task is null || task.TaskId == Guid.Empty || !completedIds.Add(task.TaskId)
+                    || string.IsNullOrWhiteSpace(task.Title) || task.Title.Length > 80)
+                    throw new InvalidDataException("Invalid completed task: " + date);
         }
         return data;
     }

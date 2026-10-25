@@ -6,8 +6,17 @@ public sealed class DayRecord
 {
     public long WorkTicks { get; set; }
     public long StudyTicks { get; set; }
+    public bool TaskHistoryRecorded { get; set; }
+    public List<CompletedTaskRecord> CompletedTasks { get; set; } = [];
     [System.Text.Json.Serialization.JsonIgnore]
     public long TotalTicks => checked(WorkTicks + StudyTicks);
+}
+
+public sealed class CompletedTaskRecord
+{
+    public Guid TaskId { get; set; }
+    public string Title { get; set; } = "";
+    public bool IsDaily { get; set; }
 }
 
 public sealed class WindowPosition
@@ -40,17 +49,52 @@ public sealed class TimerData
     public List<ChecklistItem>? Tasks { get; set; }
     public bool PersonalChecklistInitialized { get; set; }
     public DateOnly? ChecklistDate { get; set; }
+    public DateOnly? TaskHistoryStartDate { get; set; }
+    public bool HideCompletedTasks { get; set; }
+    public bool DailyTasksFirst { get; set; }
+    public bool TasksCollapsed { get; set; }
     public List<ManualEntry> ManualEntries { get; set; } = [];
     public SortedDictionary<string, DayRecord> Days { get; set; } = new(StringComparer.Ordinal);
 
     public bool AdvanceChecklistDate(DateTime today)
     {
         var date = DateOnly.FromDateTime(today);
-        if (ChecklistDate == date) return false;
+        bool startHistory = TaskHistoryStartDate is null;
+        if (startHistory) TaskHistoryStartDate = date;
+        if (ChecklistDate == date)
+        {
+            if (startHistory) GetDay(today).TaskHistoryRecorded = true;
+            return startHistory;
+        }
         if (ChecklistDate is not null && Tasks is not null)
             foreach (var task in Tasks.Where(task => task.IsDaily)) task.IsCompleted = false;
         ChecklistDate = date;
+        GetDay(today).TaskHistoryRecorded = true;
         return true;
+    }
+
+    public void SetTaskCompletion(Guid id, bool completed, DateTime today)
+    {
+        AdvanceChecklistDate(today);
+        var task = Tasks!.Single(task => task.Id == id);
+        task.IsCompleted = completed;
+        var day = GetDay(today);
+        day.TaskHistoryRecorded = true;
+        var existing = day.CompletedTasks.FindIndex(record => record.TaskId == id);
+        if (!completed)
+        {
+            if (existing >= 0) day.CompletedTasks.RemoveAt(existing);
+        }
+        else if (existing < 0)
+            day.CompletedTasks.Add(new CompletedTaskRecord { TaskId = id, Title = task.Title, IsDaily = task.IsDaily });
+    }
+
+    public IReadOnlyList<ChecklistItem> VisibleTasks()
+    {
+        IEnumerable<ChecklistItem> items = Tasks ?? [];
+        if (HideCompletedTasks) items = items.Where(task => !task.IsCompleted);
+        if (DailyTasksFirst) items = items.OrderByDescending(task => task.IsDaily);
+        return items.ToArray();
     }
 
     public DayRecord GetDay(DateTime date)
