@@ -17,7 +17,7 @@ internal sealed class TimerForm : Form
     private readonly Icon greenIcon;
     private readonly Button toggle = new();
     private readonly Button addTask = new();
-    private readonly Panel taskPanel = new() { AutoScroll = true, BackColor = Color.FromArgb(24, 30, 40) };
+    private readonly TaskListPanel taskPanel = new() { BackColor = Color.FromArgb(24, 30, 40) };
     private readonly ToolTip tooltip = new();
     private readonly ContextMenuStrip menu = new();
     private readonly ToolStripMenuItem startItem;
@@ -29,6 +29,7 @@ internal sealed class TimerForm : Form
     private Font timeFont = null!;
     private Font detailFont = null!;
     private HistoryForm? history;
+    private TaskManagementForm? taskManager;
     private string? lastPresentation;
     private string? saveError;
     private int runningTicks;
@@ -42,7 +43,8 @@ internal sealed class TimerForm : Form
     {
         this.engine = engine;
         this.store = store;
-        engine.Data.Tasks ??= TaskDefaults.Create();
+        bool initializedTasks = TaskDefaults.Initialize(engine.Data);
+        initializedTasks |= engine.Data.AdvanceChecklistDate(engine.Today);
         lastDate = engine.Today;
         recoveryWarning = warning;
         Text = "十小时 · TenHours";
@@ -72,6 +74,7 @@ internal sealed class TimerForm : Form
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("补录时间…", null, (_, _) => ShowManualEntry());
         menu.Items.Add("查看历史", null, (_, _) => ShowHistory());
+        menu.Items.Add("管理任务…", null, (_, _) => ShowTaskManager());
         var settings = new ToolStripMenuItem("设置");
         startupItem = new ToolStripMenuItem("开机自启（当前用户）", null, (_, _) => ToggleStartup());
         settings.DropDownItems.Add(startupItem);
@@ -100,17 +103,13 @@ internal sealed class TimerForm : Form
         toggle.Name = "ToggleTimer";
         toggle.Click += (_, _) => { if (engine.IsRunning) PauseTiming(); else StartTiming(); };
         Controls.Add(toggle);
-        addTask.Text = "＋  添加任务";
+        addTask.Text = "管理任务";
         addTask.FlatStyle = FlatStyle.Flat;
         addTask.FlatAppearance.BorderColor = Color.FromArgb(45, 56, 72);
         addTask.FlatAppearance.MouseOverBackColor = Color.FromArgb(33, 42, 54);
         addTask.ForeColor = Color.FromArgb(155, 175, 196);
         addTask.Cursor = Cursors.Hand;
-        addTask.Click += (_, _) =>
-        {
-            using var dialog = new TaskNameForm();
-            if (dialog.ShowDialog(this) == DialogResult.OK) AddTask(dialog.TaskTitle);
-        };
+        addTask.Click += (_, _) => ShowTaskManager();
         Controls.Add(taskPanel);
         Controls.Add(addTask);
         tooltip.SetToolTip(this, "拖动移动 · 右键切换工作 / 学习 · 双击托盘图标恢复");
@@ -135,6 +134,7 @@ internal sealed class TimerForm : Form
                 Screen.PrimaryScreen.WorkingArea.Top + 48) : new Point(position.X, position.Y);
             ClampToScreen();
             initialized = true;
+            if (initializedTasks) TrySave();
             RefreshState();
             ArmTimer();
             if (recoveryWarning is not null) tray.ShowBalloonTip(8000, "十小时 · 已恢复备份", recoveryWarning, ToolTipIcon.Warning);
@@ -245,12 +245,12 @@ internal sealed class TimerForm : Form
 
     private void RenderTasks()
     {
-        Point scroll = taskPanel.AutoScrollPosition;
+        int scroll = taskPanel.ScrollOffset;
         taskPanel.SuspendLayout();
         foreach (Control row in taskPanel.Controls.Cast<Control>().ToArray()) row.Dispose();
         taskPanel.Controls.Clear();
-        int width = taskPanel.Width - (engine.Data.Tasks!.Count > 6 ? SystemInformation.VerticalScrollBarWidth : 0);
-        if (engine.Data.Tasks.Count == 0)
+        int width = taskPanel.Width - Px(12);
+        if (engine.Data.Tasks!.Count == 0)
         {
             taskPanel.Controls.Add(new Label { Text = "写下一件想完成的事", ForeColor = Muted,
                 Font = detailFont, AutoSize = false, Bounds = new Rectangle(Px(7), 0, width - Px(7), Px(28)), TextAlign = ContentAlignment.MiddleLeft });
@@ -264,36 +264,51 @@ internal sealed class TimerForm : Form
                 BackColor = taskPanel.BackColor, Bounds = new Rectangle(0, Px(i * 28), width, Px(28)), Tag = item.Id,
                 AccessibleName = item.Title, TabIndex = i
             };
+            row.ScrollWheel = taskPanel.ScrollWheel;
+            row.GotFocus += (_, _) => taskPanel.RevealRow(row);
             row.CheckedChanged += (_, _) =>
             {
-                item.IsCompleted = row.Checked;
+                bool completed = row.Checked;
+                bool changedDate = engine.Data.AdvanceChecklistDate(engine.Today);
+                item.IsCompleted = completed;
                 SaveChecklist();
-                row.Invalidate();
+                if (changedDate) RenderTasks();
+                else row.Invalidate();
             };
-            tooltip.SetToolTip(row, item.Title + "\n右键重命名或删除");
+            tooltip.SetToolTip(row, item.Title + (item.IsDaily ? "\n每日任务 · 每天重置勾选" : "\n普通任务 · 跨天保留状态") + "\n右键编辑或删除");
             taskPanel.Controls.Add(row);
         }
         taskPanel.ResumeLayout(true);
-        taskPanel.AutoScrollPosition = new Point(-scroll.X, -scroll.Y);
+        taskPanel.Configure(Px(28), scroll);
     }
 
-    internal Guid AddTask(string title)
+    internal Guid AddTask(string title, bool isDaily = false)
     {
         title = ValidateTaskTitle(title);
-        var item = new ChecklistItem { Title = title };
+        var item = new ChecklistItem { Title = title, IsDaily = isDaily };
         engine.Data.Tasks!.Add(item);
         SaveChecklist();
         LayoutWidget();
         ClampToScreen();
+        taskManager?.Reload(item.Id);
         return item.Id;
     }
 
     internal void RenameTask(Guid id, string title)
     {
-        title = ValidateTaskTitle(title);
-        engine.Data.Tasks!.Single(x => x.Id == id).Title = title;
+        UpdateTask(id, title, engine.Data.Tasks!.Single(x => x.Id == id).IsDaily);
+    }
+
+    internal void UpdateTask(Guid id, string title, bool isDaily)
+    {
+        // Apply a pending date change before changing whether an existing task repeats.
+        RefreshState();
+        var item = engine.Data.Tasks!.Single(x => x.Id == id);
+        item.Title = ValidateTaskTitle(title);
+        item.IsDaily = isDaily;
         SaveChecklist();
         RenderTasks();
+        taskManager?.Reload(id);
     }
 
     internal void DeleteTask(Guid id)
@@ -302,12 +317,26 @@ internal sealed class TimerForm : Form
         SaveChecklist();
         LayoutWidget();
         ClampToScreen();
+        taskManager?.Reload();
+    }
+
+    internal void MoveTask(Guid id, int direction)
+    {
+        var tasks = engine.Data.Tasks!;
+        int index = tasks.FindIndex(task => task.Id == id);
+        if (index < 0) return;
+        int target = Math.Clamp(index + direction, 0, tasks.Count - 1);
+        if (target == index) return;
+        (tasks[index], tasks[target]) = (tasks[target], tasks[index]);
+        SaveChecklist();
+        RenderTasks();
+        taskManager?.Reload(id);
     }
 
     private void RenameTaskFromMenu(ChecklistItem item)
     {
-        using var dialog = new TaskNameForm(item.Title);
-        if (dialog.ShowDialog(this) == DialogResult.OK) RenameTask(item.Id, dialog.TaskTitle);
+        using var dialog = new TaskNameForm(item.Title, item.IsDaily);
+        if (dialog.ShowDialog(this) == DialogResult.OK) UpdateTask(item.Id, dialog.TaskTitle, dialog.IsDaily);
     }
 
     private static string ValidateTaskTitle(string title)
@@ -324,6 +353,7 @@ internal sealed class TimerForm : Form
         RefreshState();
         ArmTimer();
         Invalidate();
+        taskManager?.RefreshStatuses();
     }
 
     internal static string HoursMinutes(long ticks, bool ceiling)
@@ -399,6 +429,12 @@ internal sealed class TimerForm : Form
 
     private void RefreshState()
     {
+        if (engine.Data.AdvanceChecklistDate(engine.Today))
+        {
+            if (detailFont is not null) RenderTasks();
+            taskManager?.RefreshStatuses();
+            if (!TrySave()) engine.Pause();
+        }
         var day = engine.TodayRecord;
         string mode = engine.Data.Mode == ActivityMode.Work ? "工作" : "学习";
         bool reached = day.TotalTicks >= TimerEngine.GoalTicks;
@@ -443,6 +479,16 @@ internal sealed class TimerForm : Form
         if (history is { IsDisposed: false }) { history.Activate(); return; }
         history = new HistoryForm(engine.Data);
         history.Show(this);
+    }
+
+    private void ShowTaskManager()
+    {
+        RefreshState();
+        if (taskManager is { IsDisposed: false }) { taskManager.Show(); taskManager.Activate(); return; }
+        taskManager = new TaskManagementForm(engine.Data, (title, daily) => AddTask(title, daily), UpdateTask, DeleteTask, MoveTask);
+        taskManager.Activated += (_, _) => RefreshState();
+        taskManager.FormClosed += (_, _) => taskManager = null;
+        taskManager.Show(this);
     }
 
     private void ShowManualEntry()
@@ -551,6 +597,7 @@ internal sealed class TimerForm : Form
             menu.Dispose();
             tooltip.Dispose();
             history?.Dispose();
+            taskManager?.Dispose();
             redIcon.Dispose();
             greenIcon.Dispose();
             timeFont?.Dispose();

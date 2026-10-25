@@ -9,6 +9,11 @@ internal static class Program
     private static void Main(string[] args)
     {
         ApplicationConfiguration.Initialize();
+        if (args.Length == 2 && args[0] == "--preview")
+        {
+            Verification.Preview(Path.GetFullPath(args[1]));
+            return;
+        }
         // Verification runs are isolated from real user history and registry settings.
         if (args.Length == 2 && args[0] == "--verify")
         {

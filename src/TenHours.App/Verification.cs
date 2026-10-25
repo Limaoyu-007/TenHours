@@ -7,6 +7,57 @@ namespace TenHours;
 /// <summary>Opt-in integration probe: actual WinForms message loop; uses isolated data.</summary>
 internal static class Verification
 {
+    internal static void Preview(string directory)
+    {
+        Directory.CreateDirectory(directory);
+        var data = new TimerData { Tasks = [new ChecklistItem { Title = "学习一个知识点" },
+            new ChecklistItem { Title = "英语单词", IsCompleted = true }] };
+        data.GetDay(DateTime.Today).WorkTicks = TimeSpan.FromHours(2).Ticks;
+        var store = new JsonStore(Path.Combine(directory, "preview-data"));
+        using var form = new TimerForm(new TimerEngine(data, new SystemClock()), store);
+        using var step = new System.Windows.Forms.Timer { Interval = 250 };
+        int stage = 0;
+        Exception? failure = null;
+        void Capture(string name)
+        {
+            using var bitmap = new Bitmap(form.Width, form.Height);
+            form.DrawToBitmap(bitmap, new Rectangle(Point.Empty, bitmap.Size));
+            bitmap.Save(Path.Combine(directory, name + ".png"));
+        }
+        step.Tick += (_, _) =>
+        {
+            try
+            {
+                if (stage++ == 0)
+                {
+                    if (data.Tasks!.Count != 15 || !data.Tasks[0].IsCompleted)
+                        throw new InvalidOperationException("Task migration failed.");
+                    Capture("tasks-top");
+                    form.TaskRows[1].Checked = true;
+                    var panel = form.Controls.OfType<TaskListPanel>().Single();
+                    ((TaskCheckBox)form.TaskRows[0]).ScrollWheel!(-600);
+                    if (panel.AutoScroll || panel.ScrollOffset <= 0 || form.TaskRows[^1].Bottom > panel.Height)
+                        throw new InvalidOperationException("Checklist scrolling failed.");
+                }
+                else
+                {
+                    Capture("tasks-bottom");
+                    var saved = store.Load().Data;
+                    if (saved.Tasks!.Count != 15 || !saved.Tasks[1].IsCompleted || TaskDefaults.Initialize(saved)
+                        || saved.GetDay(DateTime.Today).WorkTicks != TimeSpan.FromHours(2).Ticks)
+                        throw new InvalidOperationException("Checklist persistence failed.");
+                    File.WriteAllText(Path.Combine(directory, "result.txt"), "PASS: 15 tasks migrated; checked state/history retained; dark scrolling reaches final row; saved initialization is one-time.");
+                    step.Stop();
+                    form.ExitApplication();
+                }
+            }
+            catch (Exception ex) { failure = ex; step.Stop(); form.ExitApplication(); }
+        };
+        form.Shown += (_, _) => step.Start();
+        Application.Run(form);
+        if (failure is not null) throw failure;
+    }
+
     internal static void Run(string directory)
     {
         Directory.CreateDirectory(directory);
@@ -14,6 +65,7 @@ internal static class Verification
         var clock = new ProbeClock();
         var engine = new TimerEngine(new TimerData
         {
+            PersonalChecklistInitialized = true,
             Tasks = new[] { "背一组英语单词", "完成一道算法题", "读完一节技术笔记", "整理学习笔记", "修复一个问题", "练习一段代码", "准备明日计划", "整理工作材料" }
                 .Select(x => new ChecklistItem { Title = x }).ToList()
         }, clock);

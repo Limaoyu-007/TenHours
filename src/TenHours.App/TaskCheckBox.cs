@@ -6,6 +6,13 @@ namespace TenHours;
 internal sealed class TaskCheckBox : CheckBox
 {
     private readonly ContextMenuStrip rowMenu = new();
+    internal Action<int>? ScrollWheel;
+
+    protected override void OnMouseWheel(MouseEventArgs e)
+    {
+        if (ScrollWheel is not null) ScrollWheel(e.Delta);
+        else base.OnMouseWheel(e);
+    }
 
     internal TaskCheckBox(Action rename, Action remove)
     {
@@ -13,7 +20,7 @@ internal sealed class TaskCheckBox : CheckBox
         FlatStyle = FlatStyle.Flat;
         Cursor = Cursors.Hand;
         SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, true);
-        rowMenu.Items.Add("重命名…", null, (_, _) => rename());
+        rowMenu.Items.Add("编辑任务…", null, (_, _) => rename());
         rowMenu.Items.Add("删除任务", null, (_, _) => remove());
         ContextMenuStrip = rowMenu;
     }

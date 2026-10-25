@@ -29,6 +29,7 @@ public sealed class ChecklistItem
     public Guid Id { get; set; } = Guid.NewGuid();
     public string Title { get; set; } = "";
     public bool IsCompleted { get; set; }
+    public bool IsDaily { get; set; }
 }
 
 public sealed class TimerData
@@ -37,8 +38,20 @@ public sealed class TimerData
     public ActivityMode Mode { get; set; }
     public WindowPosition? Position { get; set; }
     public List<ChecklistItem>? Tasks { get; set; }
+    public bool PersonalChecklistInitialized { get; set; }
+    public DateOnly? ChecklistDate { get; set; }
     public List<ManualEntry> ManualEntries { get; set; } = [];
     public SortedDictionary<string, DayRecord> Days { get; set; } = new(StringComparer.Ordinal);
+
+    public bool AdvanceChecklistDate(DateTime today)
+    {
+        var date = DateOnly.FromDateTime(today);
+        if (ChecklistDate == date) return false;
+        if (ChecklistDate is not null && Tasks is not null)
+            foreach (var task in Tasks.Where(task => task.IsDaily)) task.IsCompleted = false;
+        ChecklistDate = date;
+        return true;
+    }
 
     public DayRecord GetDay(DateTime date)
     {
