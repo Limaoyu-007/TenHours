@@ -79,6 +79,7 @@ internal sealed class ManualEntryForm : Form
         start.ValueChanged += (_, _) => UpdatePreview();
         end.ValueChanged += (_, _) => UpdatePreview();
         nextDay.CheckedChanged += (_, _) => UpdatePreview();
+        mode.SelectedIndexChanged += (_, _) => UpdatePreview();
         confirm.Click += (_, _) => Submit();
         UpdatePreview();
     }
@@ -89,7 +90,7 @@ internal sealed class ManualEntryForm : Form
     private void UpdatePreview()
     {
         var duration = EndTime - StartTime;
-        preview.Text = duration > TimeSpan.Zero ? $"本次补录：{(int)duration.TotalHours} 小时 {duration.Minutes:00} 分钟" : "请选择有效的开始和结束时间";
+        preview.Text = duration > TimeSpan.Zero ? $"本次计入{mode.SelectedItem}：{(int)duration.TotalHours} 小时 {duration.Minutes:00} 分钟" : "请选择有效的开始和结束时间";
         error.Text = "";
     }
 

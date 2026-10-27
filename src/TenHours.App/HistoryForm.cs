@@ -40,10 +40,12 @@ internal sealed class HistoryForm : Form
         grid.ColumnHeadersDefaultCellStyle.ForeColor = ForeColor;
         grid.ColumnHeadersHeight = 34;
         grid.RowTemplate.Height = 29;
-        foreach (var title in new[] { "日期", "工作", "学习", "合计", "达标", "完成任务" }) grid.Columns.Add(title, title);
+        foreach (var title in new[] { "日期", "工作时长", "学习时长", "总计", "达标", "完成任务" }) grid.Columns.Add(title, title);
         foreach (DataGridViewColumn column in grid.Columns) column.SortMode = DataGridViewColumnSortMode.NotSortable;
         grid.Columns[0].FillWeight = 135;
         grid.Columns[4].FillWeight = 60;
+        grid.Columns[1].DefaultCellStyle.ForeColor = Color.FromArgb(108, 184, 248);
+        grid.Columns[2].DefaultCellStyle.ForeColor = Color.FromArgb(188, 158, 250);
         var rows = data.Days.Reverse().Select(x => (x.Key, x.Value.WorkTicks, x.Value.StudyTicks, x.Value.TotalTicks,
             x.Value.TaskHistoryRecorded, Tasks: x.Value.CompletedTasks.Select(task => (task.Title, task.IsDaily)).ToArray())).ToArray();
         grid.CellValueNeeded += (_, e) =>

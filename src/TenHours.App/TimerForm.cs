@@ -9,6 +9,9 @@ internal sealed class TimerForm : Form
     private static readonly Color Muted = Color.FromArgb(159, 170, 185);
     private static readonly Color Red = Color.FromArgb(255, 99, 111);
     private static readonly Color Green = Color.FromArgb(82, 215, 155);
+    private static readonly Color WorkAccent = Color.FromArgb(108, 184, 248);
+    private static readonly Color StudyAccent = Color.FromArgb(188, 158, 250);
+    private const int ModeSectionHeight = 60;
     private readonly TimerEngine engine;
     private readonly JsonStore store;
     private readonly System.Windows.Forms.Timer timer = new();
@@ -16,6 +19,8 @@ internal sealed class TimerForm : Form
     private readonly Icon redIcon;
     private readonly Icon greenIcon;
     private readonly Button toggle = new();
+    private readonly Button workButton = new();
+    private readonly Button studyButton = new();
     private readonly Button addTask = new();
     private readonly Button collapseTasks = new();
     private readonly Button taskOptions = new();
@@ -121,6 +126,20 @@ internal sealed class TimerForm : Form
         toggle.Name = "ToggleTimer";
         toggle.Click += (_, _) => { if (engine.IsRunning) PauseTiming(); else StartTiming(); };
         Controls.Add(toggle);
+        foreach (var button in new[] { workButton, studyButton })
+        {
+            button.FlatStyle = FlatStyle.Flat;
+            button.Cursor = Cursors.Hand;
+            button.UseVisualStyleBackColor = false;
+            button.TextAlign = ContentAlignment.MiddleCenter;
+            Controls.Add(button);
+        }
+        workButton.Name = "SelectWork";
+        studyButton.Name = "SelectStudy";
+        workButton.Click += (_, _) => Switch(ActivityMode.Work);
+        studyButton.Click += (_, _) => Switch(ActivityMode.Study);
+        tooltip.SetToolTip(workButton, "工作：面向实际问题与具体交付。\n点击切换；计时中会结算上一类并继续，暂停时仍保持暂停。");
+        tooltip.SetToolTip(studyButton, "学习：积累知识、练习技能与研究方法。\n点击切换；计时中会结算上一类并继续，暂停时仍保持暂停。");
         addTask.Text = "管理任务";
         addTask.FlatStyle = FlatStyle.Flat;
         addTask.FlatAppearance.BorderColor = Color.FromArgb(45, 56, 72);
@@ -146,7 +165,7 @@ internal sealed class TimerForm : Form
         taskOptions.AccessibleName = "清单显示选项";
         taskOptions.Click += (_, _) => taskDisplayMenu.Show(taskOptions, new Point(0, taskOptions.Height));
         tooltip.SetToolTip(taskOptions, "隐藏已完成 · 每日任务置顶 · 折叠任务区");
-        tooltip.SetToolTip(this, "拖动移动 · 右键切换工作 / 学习 · 双击托盘图标恢复");
+        tooltip.SetToolTip(this, "点击工作 / 学习切换 · 拖动背景移动 · 双击托盘图标恢复");
         timer.Tick += (_, _) => OnTick();
         MouseDown += (_, e) =>
         {
@@ -209,7 +228,7 @@ internal sealed class TimerForm : Form
     private int Px(float value) => (int)Math.Round(value * WindowDpi / 96f);
 
     internal const int LogicalWidth = 260;
-    internal int LogicalHeight => engine.Data.TasksCollapsed ? 176 : 220 + 28 * Math.Clamp(engine.Data.VisibleTasks().Count, 1, 6);
+    internal int LogicalHeight => ModeSectionHeight + (engine.Data.TasksCollapsed ? 176 : 220 + 28 * Math.Clamp(engine.Data.VisibleTasks().Count, 1, 6));
     internal IReadOnlyList<CheckBox> TaskRows => taskPanel.Controls.OfType<CheckBox>().ToArray();
 
     private void LayoutWidget()
@@ -220,16 +239,20 @@ internal sealed class TimerForm : Form
         timeFont = new Font("Segoe UI", 32 * WindowDpi / 96f, FontStyle.Regular, GraphicsUnit.Pixel);
         detailFont = new Font("Microsoft YaHei UI", 11 * WindowDpi / 96f, FontStyle.Regular, GraphicsUnit.Pixel);
         toggle.Font = detailFont;
-        toggle.SetBounds(Px(184), Px(95), Px(60), Px(25));
+        toggle.SetBounds(Px(164), Px(95 + ModeSectionHeight), Px(80), Px(25));
+        workButton.Font = studyButton.Font = detailFont;
+        workButton.SetBounds(Px(16), Px(78), Px(110), Px(52));
+        studyButton.SetBounds(Px(134), Px(78), Px(110), Px(52));
+        UpdateModeButtons();
         collapseTasks.Font = taskOptions.Font = detailFont;
         collapseTasks.Text = (engine.Data.TasksCollapsed ? "▸  " : "▾  ") + "任务清单";
-        collapseTasks.SetBounds(Px(12), Px(140), Px(128), Px(25));
-        taskOptions.SetBounds(Px(149), Px(140), Px(27), Px(25));
+        collapseTasks.SetBounds(Px(12), Px(140 + ModeSectionHeight), Px(128), Px(25));
+        taskOptions.SetBounds(Px(149), Px(140 + ModeSectionHeight), Px(27), Px(25));
         taskPanel.Visible = addTask.Visible = !engine.Data.TasksCollapsed;
         int panelHeight = Px(28 * Math.Clamp(engine.Data.VisibleTasks().Count, 1, 6));
-        taskPanel.SetBounds(Px(12), Px(170), Px(236), panelHeight);
+        taskPanel.SetBounds(Px(12), Px(170 + ModeSectionHeight), Px(236), panelHeight);
         addTask.Font = detailFont;
-        addTask.SetBounds(Px(16), Px(170) + panelHeight + Px(10), Px(228), Px(26));
+        addTask.SetBounds(Px(16), Px(170 + ModeSectionHeight) + panelHeight + Px(10), Px(228), Px(26));
         RenderTasks();
         previousTimeFont?.Dispose();
         previousDetailFont?.Dispose();
@@ -255,25 +278,30 @@ internal sealed class TimerForm : Form
         using var lamp = new SolidBrush(signal);
         g.FillEllipse(glow, Px(220), Px(8), Px(24), Px(24));
         g.FillEllipse(lamp, Px(226), Px(14), Px(12), Px(12));
-        TextRenderer.DrawText(g, "今日累计", detailFont, new Rectangle(Px(16), Px(11), Px(180), Px(18)), Muted,
+        TextRenderer.DrawText(g, "今日总计", detailFont, new Rectangle(Px(16), Px(11), Px(90), Px(18)), Muted,
             TextFormatFlags.Left | TextFormatFlags.NoPadding);
+        string activeMode = engine.Data.Mode == ActivityMode.Work ? "工作" : "学习";
+        TextRenderer.DrawText(g, activeMode + (engine.IsRunning ? " · 计时中" : " · 已暂停"), detailFont,
+            new Rectangle(Px(108), Px(11), Px(106), Px(18)),
+            engine.IsRunning ? (engine.Data.Mode == ActivityMode.Work ? WorkAccent : StudyAccent) : Muted,
+            TextFormatFlags.Right | TextFormatFlags.NoPadding);
         string total = HoursMinutes(ticks, false);
         TextRenderer.DrawText(g, total, timeFont, new Rectangle(Px(16), Px(31), Px(220), Px(40)),
             Color.FromArgb(242, 245, 249), TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
         using var track = new SolidBrush(Color.FromArgb(47, 55, 67));
-        var bar = new RectangleF(Px(16), Px(80), Px(228), Px(4));
+        var bar = new RectangleF(Px(16), Px(80 + ModeSectionHeight), Px(228), Px(4));
         g.FillRoundedRectangle(track, bar, new SizeF(Px(2), Px(2)));
         float progress = (float)Math.Clamp(ticks / (double)TimerEngine.GoalTicks, 0, 1);
         if (progress > 0) g.FillRoundedRectangle(lamp, new RectangleF(bar.X, bar.Y, Math.Max(Px(4), bar.Width * progress), bar.Height), new SizeF(Px(2), Px(2)));
         string remaining = saveError is not null ? "保存失败 · 已暂停" : reached ? "今日已达标" : "还需 " + HoursMinutes(TimerEngine.GoalTicks - ticks, true);
-        TextRenderer.DrawText(g, remaining, detailFont, new Rectangle(Px(16), Px(95), Px(160), Px(25)),
+        TextRenderer.DrawText(g, remaining, detailFont, new Rectangle(Px(16), Px(95 + ModeSectionHeight), Px(140), Px(25)),
             saveError is not null ? Red : reached ? Green : Muted,
             TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
         using var divider = new Pen(Color.FromArgb(40, 49, 63), 1);
-        g.DrawLine(divider, Px(16), Px(133), Px(244), Px(133));
+        g.DrawLine(divider, Px(16), Px(133 + ModeSectionHeight), Px(244), Px(133 + ModeSectionHeight));
         int completed = engine.Data.Tasks!.Count(x => x.IsCompleted);
         TextRenderer.DrawText(g, $"{completed} / {engine.Data.Tasks!.Count}", detailFont,
-            new Rectangle(Px(181), Px(145), Px(63), Px(18)), Muted, TextFormatFlags.Right | TextFormatFlags.NoPadding);
+            new Rectangle(Px(181), Px(145 + ModeSectionHeight), Px(63), Px(18)), Muted, TextFormatFlags.Right | TextFormatFlags.NoPadding);
         using var border = new Pen(Color.FromArgb(62, 71, 84), 1);
         using var outline = new GraphicsPath();
         outline.AddRoundedRectangle(new RectangleF(.5f, .5f, Width - 1, Height - 1), new SizeF(Px(10), Px(10)));
@@ -432,9 +460,11 @@ internal sealed class TimerForm : Form
 
     internal void Switch(ActivityMode mode)
     {
+        if (engine.Data.Mode == mode) return;
         engine.SwitchMode(mode);
         if (!TrySave()) engine.Pause();
         RefreshState();
+        ArmTimer();
     }
 
     private void OnTick()
@@ -489,11 +519,12 @@ internal sealed class TimerForm : Form
         var day = engine.TodayRecord;
         string mode = engine.Data.Mode == ActivityMode.Work ? "工作" : "学习";
         bool reached = day.TotalTicks >= TimerEngine.GoalTicks;
-        string presentation = $"{engine.Today:yyyyMMdd}|{day.TotalTicks / TimeSpan.TicksPerMinute}|{engine.IsRunning}|{mode}|{reached}|{saveError}";
+        string presentation = $"{engine.Today:yyyyMMdd}|{day.TotalTicks / TimeSpan.TicksPerMinute}|{day.WorkTicks / TimeSpan.TicksPerMinute}|{day.StudyTicks / TimeSpan.TicksPerMinute}|{engine.IsRunning}|{mode}|{reached}|{saveError}";
         if (presentation != lastPresentation)
         {
             lastPresentation = presentation;
-            toggle.Text = engine.IsRunning ? "暂停" : "开始";
+            toggle.Text = (engine.IsRunning ? "暂停" : "开始") + mode;
+            UpdateModeButtons();
             tooltip.SetToolTip(toggle, mode + " · " + (engine.IsRunning ? "点击暂停" : "点击开始"));
             tray.Icon = reached ? greenIcon : redIcon;
             tray.Text = $"十小时 · {mode} · {(engine.IsRunning ? "计时中" : "已暂停")}\n今日 {HoursMinutes(day.TotalTicks, false)} / 10:00";
@@ -504,6 +535,33 @@ internal sealed class TimerForm : Form
         workItem.Checked = engine.Data.Mode == ActivityMode.Work;
         studyItem.Checked = engine.Data.Mode == ActivityMode.Study;
         retryItem.Visible = saveError is not null;
+    }
+
+    private void UpdateModeButtons()
+    {
+        var day = engine.TodayRecord;
+        void Style(Button button, ActivityMode mode, string label, long ticks, Color accent)
+        {
+            bool selected = engine.Data.Mode == mode;
+            button.Text = (selected ? "✓ " : "") + label + "\n" + HoursMinutes(ticks, false);
+            button.AccessibleName = label + "累计 " + HoursMinutes(ticks, false) + (selected ? "，当前已选" : "，点击切换");
+            button.BackColor = selected
+                ? (mode == ActivityMode.Work ? Color.FromArgb(29, 48, 66) : Color.FromArgb(47, 38, 65))
+                : Color.FromArgb(26, 33, 44);
+            button.ForeColor = selected ? accent : Muted;
+            button.FlatAppearance.BorderColor = selected ? accent : Color.FromArgb(52, 64, 81);
+            button.FlatAppearance.BorderSize = Math.Max(1, Px(selected ? 2 : 1));
+            button.FlatAppearance.MouseOverBackColor = mode == ActivityMode.Work
+                ? Color.FromArgb(36, 58, 78) : Color.FromArgb(58, 46, 79);
+            button.FlatAppearance.MouseDownBackColor = button.FlatAppearance.MouseOverBackColor;
+        }
+        Style(workButton, ActivityMode.Work, "工作", day.WorkTicks, WorkAccent);
+        Style(studyButton, ActivityMode.Study, "学习", day.StudyTicks, StudyAccent);
+        Color selectedAccent = engine.Data.Mode == ActivityMode.Work ? WorkAccent : StudyAccent;
+        toggle.BackColor = selectedAccent;
+        toggle.ForeColor = Background;
+        toggle.FlatAppearance.MouseOverBackColor = ControlPaint.Light(selectedAccent);
+        toggle.FlatAppearance.MouseDownBackColor = ControlPaint.Dark(selectedAccent);
     }
 
     private void ToggleStartup()
