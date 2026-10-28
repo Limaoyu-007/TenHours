@@ -1,10 +1,22 @@
 # 10 Hours — 有限制的自由
 
+[简体中文](README.md) · [English](README.en.md)
+
 > **自由不是想做什么就做什么，而是在拥有选择权之后，依然能够主动选择自己认可的约束。**
 
 一个常驻桌面的十小时倒计时 App。
 
 它的规则很简单：**每天累计投入 10 小时有效的工作与学习时间。未达标，红灯；达标，绿灯。**
+
+<p align="center">
+  <img src="docs/images/desktop-work-study.png" width="280" alt="实际使用中的十小时悬浮窗：工作 02:21、学习 01:24、今日总计 03:45，红灯表示尚未达标" />
+</p>
+
+<p align="center">
+  <a href="https://github.com/Limaoyu-007/TenHours/releases/latest">下载 Windows 版</a> ·
+  <a href="#界面预览">查看界面</a> ·
+  <a href="README.en.md">Read in English</a>
+</p>
 
 ## 为什么做这个项目？
 
@@ -71,16 +83,36 @@
 
 Native C# / .NET 10 / WinForms. Local data, no accounts, no network.
 
-<p>
-  <img src="docs/images/timer.png" width="260" alt="尚未达标的计时器与任务清单" />
-  <img src="docs/images/checklist.png" width="260" alt="达标后的绿灯与已勾选任务" />
+## 界面预览
+
+### 工作与学习分开，十小时共同达标
+
+<p align="center">
+  <img src="docs/images/desktop-work-study.png" width="260" alt="实际使用截图：工作与学习分别计时，任务完成后打勾" />
+  <img src="docs/images/goal-reached.png" width="260" alt="示例数据中的达标状态：工作七小时、学习三小时，总计十小时，信号灯变绿" />
 </p>
 
-截图来自 1.2.0 的实际 WinForms 窗口，使用示例任务与模拟时间；新版增加了独立任务管理窗口与每日任务设置。
+左图是实际使用截图；右图是实际原生窗口使用示例数据展示的达标状态。工作、学习各自记账，达标后仍可继续累计。
+
+### 单独管理任务
+
+<p align="center">
+  <img src="docs/images/task-management.png" width="700" alt="任务管理窗口：修改任务名称、设置每日任务、添加删除以及上下调整顺序" />
+</p>
+
+任务清单负责提醒，做完打勾即可。添加、编辑、删除、排序和每日任务设置集中在一个独立窗口中。
+
+### 回看时间，也回看完成了什么
+
+<p align="center">
+  <img src="docs/images/daily-history.png" width="760" alt="历史窗口：按日期查看工作、学习、总计及达标状态，下方显示当天完成的任务" />
+</p>
+
+任务管理、历史与达标截图均由实际 WinForms 窗口生成，使用隔离的示例数据；界面当前为简体中文，英文项目介绍见 [English README](README.en.md)。
 
 ## 下载运行
 
-直接下载 [Windows x64 · v1.5.0](https://github.com/Limaoyu-007/TenHours/releases/download/v1.5.0/TenHours-v1.5.0-win-x64.zip)，或前往 [Releases](https://github.com/Limaoyu-007/TenHours/releases/latest) 查看最新版本，解压后双击 `TenHours.exe`。
+直接下载 [Windows x64 · v1.5.1](https://github.com/Limaoyu-007/TenHours/releases/download/v1.5.1/TenHours-v1.5.1-win-x64.zip)，或前往 [Releases](https://github.com/Limaoyu-007/TenHours/releases/latest) 查看最新版本，解压后双击 `TenHours.exe`。
 
 发布版自带 .NET 运行时，无需另装 .NET。支持 Windows 10/11 x64；首次打开默认暂停，开机自启默认关闭。升级前先从托盘菜单退出旧版，再启动新版，原有本地历史会保留。
 
@@ -186,6 +218,7 @@ docs/images/           实际窗口截图（示例数据）
 
 ## 版本
 
+- **1.5.1**：新增中英文项目介绍、实际使用截图和任务管理、历史、达标状态展示；应用功能沿用 1.5.0。
 - **1.5.0**：明显的工作 / 学习切换按钮、独立时长与今日总计，当前类别高亮，补录明确提示分类。
 - **1.4.0**：隐藏已完成、每日任务置顶、折叠任务区，按日期保留完成任务并在历史中查看。
 - **1.3.0**：独立任务管理窗口，添加、编辑、删除、排序与每日任务跨天重置。
