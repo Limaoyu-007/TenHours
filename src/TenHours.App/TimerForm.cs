@@ -84,6 +84,7 @@ internal sealed class TimerForm : Form
         menu.Items.AddRange([startItem, pauseItem, new ToolStripSeparator(), workItem, studyItem]);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("补录时间…", null, (_, _) => ShowManualEntry());
+        menu.Items.Add("扣减 / 清零时间…", null, (_, _) => ShowTimeDeduction());
         menu.Items.Add("查看历史", null, (_, _) => ShowHistory());
         menu.Items.Add("管理任务…", null, (_, _) => ShowTaskManager());
         var display = new ToolStripMenuItem("清单显示") { DropDown = taskDisplayMenu };
@@ -604,6 +605,21 @@ internal sealed class TimerForm : Form
     private void ShowManualEntry()
     {
         using var dialog = new ManualEntryForm(DateTime.Now, engine.Data.Mode, AddManualEntry);
+        dialog.ShowDialog(this);
+    }
+
+    private void ShowTimeDeduction()
+    {
+        PauseTiming();
+        using var dialog = new TimeDeductionForm(engine.Data, engine.Today, (date, mode, duration, clear) =>
+        {
+            engine.DeductTime(date, mode, duration, clear);
+            // Applied once in memory; persistence retries must not deduct again.
+            TrySave();
+            history?.Close();
+            RefreshState();
+            ArmTimer();
+        });
         dialog.ShowDialog(this);
     }
 

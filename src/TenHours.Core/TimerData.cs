@@ -41,6 +41,14 @@ public sealed class ChecklistItem
     public bool IsDaily { get; set; }
 }
 
+public sealed class TimeDeduction
+{
+    public DateOnly Date { get; set; }
+    public ActivityMode Mode { get; set; }
+    public long Ticks { get; set; }
+    public DateTimeOffset RecordedAt { get; set; }
+}
+
 public sealed class TimerData
 {
     public int Version { get; set; } = 1;
@@ -54,6 +62,7 @@ public sealed class TimerData
     public bool DailyTasksFirst { get; set; }
     public bool TasksCollapsed { get; set; }
     public List<ManualEntry> ManualEntries { get; set; } = [];
+    public List<TimeDeduction> TimeDeductions { get; set; } = [];
     public SortedDictionary<string, DayRecord> Days { get; set; } = new(StringComparer.Ordinal);
 
     public bool AdvanceChecklistDate(DateTime today)

@@ -81,6 +81,26 @@ public sealed class TimerEngine(TimerData data, IClock clock)
         return entry;
     }
 
+    public void DeductTime(DateTime date, ActivityMode mode, TimeSpan duration, bool clearCategory = false)
+    {
+        if (!Enum.IsDefined(mode)) throw new ArgumentException("请选择工作或学习。");
+        if (date.Date > Today) throw new ArgumentException("不能修改未来日期。");
+        if (!clearCategory && duration <= TimeSpan.Zero) throw new ArgumentException("请输入需要扣减的时长。");
+        Settle();
+        var key = date.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
+        if (!Data.Days.TryGetValue(key, out var day)) throw new ArgumentException("所选日期没有可扣减的时间。");
+        long available = mode == ActivityMode.Work ? day.WorkTicks : day.StudyTicks;
+        long ticks = clearCategory ? available : duration.Ticks;
+        if (ticks <= 0) throw new ArgumentException("所选类别没有可扣减的时间。");
+        if (ticks > available) throw new ArgumentException("扣减时长超过所选类别的累计时间，请减少时长或选择清零。");
+        if (mode == ActivityMode.Work) day.WorkTicks -= ticks;
+        else day.StudyTicks -= ticks;
+        Data.TimeDeductions.Add(new TimeDeduction
+        {
+            Date = DateOnly.FromDateTime(date), Mode = mode, Ticks = ticks, RecordedAt = clock.LocalNow
+        });
+    }
+
     public void Settle()
     {
         if (!IsRunning) return;

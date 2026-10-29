@@ -74,7 +74,10 @@ public sealed class JsonStore(string directory)
         using var stream = File.OpenRead(path);
         var data = JsonSerializer.Deserialize<TimerData>(stream, Options) ?? throw new InvalidDataException("Empty JSON.");
         if (data.Version != 1) throw new InvalidDataException("Unsupported data version: " + data.Version);
-        if (!Enum.IsDefined(data.Mode) || data.Days is null || data.ManualEntries is null) throw new InvalidDataException("Invalid settings.");
+        if (!Enum.IsDefined(data.Mode) || data.Days is null || data.ManualEntries is null || data.TimeDeductions is null) throw new InvalidDataException("Invalid settings.");
+        foreach (var deduction in data.TimeDeductions)
+            if (deduction is null || !Enum.IsDefined(deduction.Mode) || deduction.Ticks <= 0)
+                throw new InvalidDataException("Invalid time deduction.");
         var manualIds = new HashSet<Guid>();
         if (data.Tasks is not null)
         {

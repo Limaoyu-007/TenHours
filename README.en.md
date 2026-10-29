@@ -102,7 +102,7 @@ The task manager, history, and green-light screenshots use isolated demo data in
 
 ## Download and run
 
-Download [Windows x64 · v1.5.1](https://github.com/Limaoyu-007/TenHours/releases/download/v1.5.1/TenHours-v1.5.1-win-x64.zip), or visit [the latest release](https://github.com/Limaoyu-007/TenHours/releases/latest). Extract the ZIP and double-click `TenHours.exe`.
+Download [Windows x64 · v1.6.0](https://github.com/Limaoyu-007/TenHours/releases/download/v1.6.0/TenHours-v1.6.0-win-x64.zip), or visit [the latest release](https://github.com/Limaoyu-007/TenHours/releases/latest). Extract the ZIP and double-click `TenHours.exe`.
 
 - Windows 10/11 x64.
 - The release includes the .NET runtime; no separate runtime installation is needed.
@@ -120,6 +120,7 @@ Download [Windows x64 · v1.5.1](https://github.com/Limaoyu-007/TenHours/release
 | 任务清单 / 管理任务 | Checklist / Manage tasks |
 | 每日任务 | Daily task: resets to unchecked each new day |
 | 查看历史 / 补录时间 | History / Add a past time interval |
+| 扣减 / 清零时间 | Deduct time / Reset a category for a selected date |
 | 退出 | Exit and stop timing |
 
 Select **工作** or **学习**, then press Start. Switching categories while running settles the previous category and continues in the new one. Switching while paused keeps the timer paused.
@@ -140,13 +141,21 @@ Choose a date, start and end times, and either work or study. Entries are **addi
 
 For an interval crossing midnight, check the next-day option; the duration is split between dates. Each entry can cover up to 24 hours and must end in the past. Adding an entry preserves the active category and running or paused state.
 
+## Correct accidentally recorded time
+
+Right-click the widget or tray icon and choose **扣减 / 清零时间…** (Deduct / Reset time). Opening this dialog settles and pauses the timer. Select a date and Work or Study, then enter the excess hours and minutes. For example, deducting two hours from six hours of work leaves four; study time stays unchanged.
+
+The reset checkbox clears only the selected category on that date, including fractional minutes. A preview shows the current duration, deduction, and remaining duration before confirmation. Deductions cannot exceed the recorded amount or target future dates. If an accidental session spans midnight, correct each date separately. Other categories and completed tasks are preserved.
+
+The combined total and goal light update immediately, including turning red again below ten hours. Both confirming and cancelling leave the timer paused; resume manually when ready. Adjustment records are saved in local JSON. An accidental deduction can be added back through manual time entry. If saving fails, use Retry Save instead of repeating the deduction: the adjustment is already retained in memory.
+
 ## Local data and timing
 
 All user data stays in `%LOCALAPPDATA%\TenHours\`, independently of where the executable is stored.
 
 | File | Purpose |
 | --- | --- |
-| `data.json` | Time history, completed tasks, checklist settings, position, mode, and manual entries |
+| `data.json` | Time history, completed tasks, checklist settings, position, mode, manual entries, and time deductions |
 | `data.json.bak` | The previous complete saved copy |
 | `data.damaged-*.json` | A damaged primary file retained during backup recovery |
 
@@ -154,7 +163,7 @@ Pause and exit before copying this folder for backup. There is no automatic hist
 
 Elapsed time comes from a monotonic clock rather than counting UI timer ticks. The app pauses on Windows lock or suspend notifications; resume manually after unlocking or waking. Normal reopening starts paused and does not count offline time.
 
-Running time is checkpointed approximately every five seconds. Pausing, switching categories, manual entries, task changes, date changes, and exit trigger saves. Data is written to a temporary file, flushed, and atomically moved or replaced, with a previous-copy backup. A save failure pauses timing and retains the in-memory progress for retry.
+Running time is checkpointed approximately every five seconds. Pausing, switching categories, manual entries, time deductions, task changes, date changes, and exit trigger saves. Data is written to a temporary file, flushed, and atomically moved or replaced, with a previous-copy backup. A save failure pauses timing and retains the in-memory progress for retry.
 
 A crash or power loss can lose time since the last checkpoint—normally about five seconds, potentially more if the UI is blocked. If the primary file is damaged, the app tries its backup. If neither is readable, it preserves both and refuses to overwrite them.
 
@@ -193,6 +202,8 @@ docs/images/           Actual usage and native-window demo screenshots
 The core regression program covers timing, midnight boundaries, manual entries, recovery, and task persistence. Version 1.4.0 passed 25 core cases. Documentation screenshots show real windows but do not establish full interaction or long-running performance verification. See [verification details and limits, in Chinese](docs/VALIDATION.md).
 
 ## Releases
+
+- **1.6.0:** Deduct accidentally recorded time or reset a category for a selected date, with a balance preview and local adjustment records.
 
 - **1.5.1:** Chinese and English project documentation, real usage and native-window screenshots. Application features carry over from 1.5.0.
 - **1.5.0:** Visible work/study selectors, separate counters, a combined total, and explicit category labels.
